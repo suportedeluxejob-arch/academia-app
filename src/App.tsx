@@ -537,7 +537,7 @@ function App() {
         )}
 
         {activeTab === 'explore' && (
-          <Explore />
+          <Explore onPlanActivated={() => setActiveTab('home')} />
         )}
 
         {activeTab === 'progress' && (

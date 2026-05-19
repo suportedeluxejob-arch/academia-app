@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CheckCircle, ChevronRight, Scale, Activity, Droplet, Sparkles } from 'lucide-react';
+import { CheckCircle, ChevronRight, Sparkles } from 'lucide-react';
 import { ref, set, get } from 'firebase/database';
 import { db, auth } from './firebase';
 import './Explore.css';
@@ -259,7 +259,9 @@ const EXERCISE_DATABASE: any = {
   ]
 };
 
-export default function Explore() {
+interface ExploreProps { onPlanActivated: () => void; }
+
+export default function Explore({ onPlanActivated }: ExploreProps) {
   const [step, setStep] = useState(1);
   const [subStep, setSubStep] = useState(0);
   const [goal, setGoal] = useState('hypertrophy'); // hypertrophy | fat_loss | performance | wellness
@@ -275,16 +277,21 @@ export default function Explore() {
 
   // Selected muscles
   const [selectedMuscles, setSelectedMuscles] = useState<string[]>(['quads', 'calves', 'back']);
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
-
-  // Calculated Results
-  const [waterGoal, setWaterGoal] = useState(0);
-  const [calorieGoal, setCalorieGoal] = useState(0);
-  const [bmi, setBmi] = useState<number>(0);
-  const [bmiClass, setBmiClass] = useState<string>('');
-  const [minWeight, setMinWeight] = useState<number>(0);
-  const [maxWeight, setMaxWeight] = useState<number>(0);
   const [generatedWorkouts, setGeneratedWorkouts] = useState<any[]>([]);
+  const GOAL_MAP: any = {
+    hypertrophy: { icon: '💪', label: 'HIPERTROFIA', color: '#ff6b35' },
+    fat_loss:    { icon: '🔥', label: 'EMAGRECIMENTO', color: '#ff9500' },
+    performance: { icon: '⚡', label: 'PERFORMANCE', color: '#bf5af2' },
+    wellness:    { icon: '🧘', label: 'BEM-ESTAR', color: '#30d158' },
+  };
+  const goalInfo = GOAL_MAP[goal] || GOAL_MAP.hypertrophy;
+  const WEEK_DAYS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+  const SCHEDULE_MAP: any = {
+    sedentary: ['A', '-', 'B', '-', '-', '-', '-'],
+    moderate:  ['A', '-', 'B', '-', 'A', '-', '-'],
+    active:    ['A', 'B', '-', 'A', 'B', '-', '-'],
+  };
+  const weekSchedule = SCHEDULE_MAP[activity] || SCHEDULE_MAP.moderate;
 
   const toggleMuscle = (id: string) => {
     setSelectedMuscles(prev => 
@@ -299,49 +306,17 @@ export default function Explore() {
 
     if (isNaN(w) || isNaN(h) || isNaN(a)) return;
 
-    // 1. Water Calculation
-    const calculatedWater = Math.round(w * 35);
-    setWaterGoal(calculatedWater);
-
-    // 2. BMI Calculation and classification
+    // BMI for intensity classification (local only)
     const heightMeters = h / 100;
     const computedBmi = parseFloat((w / (heightMeters * heightMeters)).toFixed(1));
-    setBmi(computedBmi);
 
-    let classification = '';
-    if (computedBmi < 18.5) classification = 'Abaixo do Peso';
-    else if (computedBmi >= 18.5 && computedBmi < 25) classification = 'Peso Ideal (Saudável)';
-    else if (computedBmi >= 25 && computedBmi < 30) classification = 'Sobrepeso';
-    else classification = 'Obesidade';
-    setBmiClass(classification);
-
-    // 3. Recommended Ideal Weight Range
-    setMinWeight(Math.round(18.5 * (heightMeters * heightMeters)));
-    setMaxWeight(Math.round(24.9 * (heightMeters * heightMeters)));
-
-    // 4. Calorie calculation
-    let bmr = 0;
-    if (gender === 'male') {
-      bmr = 10 * w + 6.25 * h - 5 * a + 5;
-    } else {
-      bmr = 10 * w + 6.25 * h - 5 * a - 161;
-    }
-
-    let multiplier = 1.375;
-    if (activity === 'sedentary') multiplier = 1.2;
-    else if (activity === 'active') multiplier = 1.725;
-
-    const calculatedCalories = Math.round(bmr * multiplier);
-    setCalorieGoal(calculatedCalories);
-
-    // 5. Sets/reps based on GOAL first, then adjusted by BMI
+    // Sets/reps based on GOAL first, then adjusted by BMI
     let sets = 4;
     let reps = '10-12';
     if (goal === 'hypertrophy') { sets = 4; reps = '8-12'; }
     else if (goal === 'fat_loss') { sets = 4; reps = '12-15'; }
     else if (goal === 'performance') { sets = 5; reps = '5-8'; }
     else if (goal === 'wellness') { sets = 3; reps = '12-15'; }
-    // BMI override for extremes
     if (computedBmi < 18.5) { sets = 3; reps = '8-10'; }
 
     // Split selected muscles into max 2 training sheets
@@ -409,28 +384,35 @@ export default function Explore() {
     const user = auth.currentUser;
     if (!user) return;
     const userRef = ref(db, `users/${user.uid}`);
-    // Preserve existing progress (streak, XP, history, etc.)
     const snapshot = await get(userRef);
     const existing = snapshot.val() || {};
+
+    const w = parseFloat(weight);
+    const h = parseFloat(height);
+    const a = parseInt(age);
+    const calculatedWater = Math.round(w * 35);
+    const bmr = gender === 'male' ? 10 * w + 6.25 * h - 5 * a + 5 : 10 * w + 6.25 * h - 5 * a - 161;
+    const multiplier = activity === 'sedentary' ? 1.2 : activity === 'active' ? 1.725 : 1.375;
+    const calculatedCalories = Math.round(bmr * multiplier);
+
     await set(userRef, {
       ...existing,
-      weight: parseFloat(weight),
-      height: parseFloat(height),
-      age: parseInt(age),
+      weight: w,
+      height: h,
+      age: a,
       gender,
       activity,
       goal,
       waist: parseFloat(waist),
       arm: parseFloat(arm),
-      waterGoal,
-      calorieGoal,
+      waterGoal: calculatedWater,
+      calorieGoal: calculatedCalories,
       currentPlan: generatedWorkouts,
-      // Reset only daily trackers, not progress
       water: 0,
       caloriesEaten: 0,
       caloriesBurned: 0,
     });
-    setShowSuccessModal(true);
+    onPlanActivated();
   };
 
   return (
@@ -774,153 +756,82 @@ export default function Explore() {
           </div>
         )}
 
-        {step === 3 && (() => {
-          const goalMap: any = {
-            hypertrophy: { icon: '💪', label: 'MODO HIPERTROFIA', color: '#ff6b35' },
-            fat_loss:    { icon: '🔥', label: 'MODO EMAGRECIMENTO', color: '#ff9500' },
-            performance: { icon: '⚡', label: 'MODO PERFORMANCE', color: '#bf5af2' },
-            wellness:    { icon: '🧘', label: 'MODO BEM-ESTAR', color: '#30d158' },
-          };
-          const g = goalMap[goal] || goalMap.hypertrophy;
-          // Weekly schedule based on frequency
-          const days = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
-          const scheduleMap: any = {
-            sedentary: ['A', '-', 'B', '-', '-', '-', '-'],
-            moderate:  ['A', '-', 'B', '-', 'A', '-', '-'],
-            active:    ['A', 'B', '-', 'A', 'B', '-', '-'],
-          };
-          const schedule = scheduleMap[activity] || scheduleMap.moderate;
-          return (
+        {step === 3 && (
           <div className="step-container">
-            {/* Goal Badge */}
-            <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', background: `${g.color}15`, border: `1px solid ${g.color}40`, borderRadius: '100px', padding: '0.5rem 1.25rem', marginBottom: '1rem' }}>
-                <span style={{ fontSize: '1.25rem' }}>{g.icon}</span>
-                <span style={{ fontSize: '0.75rem', fontWeight: 800, color: g.color, letterSpacing: '0.08em' }}>{g.label} ATIVADO</span>
+            {/* Goal badge */}
+            <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', background: `${goalInfo.color}15`, border: `1px solid ${goalInfo.color}40`, borderRadius: '100px', padding: '0.45rem 1.1rem', marginBottom: '0.75rem' }}>
+                <span style={{ fontSize: '1.1rem' }}>{goalInfo.icon}</span>
+                <span style={{ fontSize: '0.7rem', fontWeight: 800, color: goalInfo.color, letterSpacing: '0.08em' }}>MODO {goalInfo.label} ATIVADO</span>
               </div>
-              <div className="success-icon-ring">
-                <Sparkles size={32} color="var(--accent-primary)" />
-              </div>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginTop: '1rem' }}>Seu Perfil Atlético Gerado!</h3>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Cargas, séries e hidratação calculadas para o seu corpo</p>
+              <h3 style={{ fontSize: '1.125rem', fontWeight: 700, color: '#fff', marginBottom: '0.25rem' }}>Seu Plano Atlético Gerado!</h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.8125rem' }}>Cargas calculadas para o seu corpo</p>
             </div>
 
-            {/* Weekly Schedule */}
-            <div className="glass-panel" style={{ padding: '1rem', borderRadius: '16px', marginBottom: '1.25rem' }}>
-              <p style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.75rem', letterSpacing: '0.06em' }}>DIVISÃO SEMANAL RECOMENDADA</p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '0.25rem', textAlign: 'center' }}>
-                {days.map((d, i) => (
-                  <div key={i}>
-                    <div style={{ fontSize: '0.625rem', color: 'var(--text-secondary)', marginBottom: '0.35rem', fontWeight: 600 }}>{d}</div>
-                    <div style={{
-                      padding: '0.4rem 0.1rem',
-                      borderRadius: '8px',
-                      fontSize: '0.65rem',
-                      fontWeight: 700,
-                      background: schedule[i] !== '-' ? `${g.color}20` : 'rgba(255,255,255,0.04)',
-                      color: schedule[i] !== '-' ? g.color : 'var(--text-secondary)',
-                      border: schedule[i] !== '-' ? `1px solid ${g.color}40` : '1px solid transparent',
-                    }}>{schedule[i] !== '-' ? schedule[i] : '—'}</div>
+            {/* Weekly schedule — compact */}
+            <div className="glass-panel" style={{ padding: '0.875rem 1rem', borderRadius: '16px', marginBottom: '1.25rem' }}>
+              <p style={{ fontSize: '0.6875rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.625rem', letterSpacing: '0.06em' }}>DIVISÃO SEMANAL</p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '3px' }}>
+                {WEEK_DAYS.map((d, i) => (
+                  <div key={i} style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '0.6rem', color: 'var(--text-secondary)', marginBottom: '3px', fontWeight: 600 }}>{d}</div>
+                    <div style={{ padding: '0.3rem 0', borderRadius: '6px', fontSize: '0.6rem', fontWeight: 700, background: weekSchedule[i] !== '-' ? `${goalInfo.color}22` : 'rgba(255,255,255,0.04)', color: weekSchedule[i] !== '-' ? goalInfo.color : 'rgba(255,255,255,0.2)', border: weekSchedule[i] !== '-' ? `1px solid ${goalInfo.color}35` : '1px solid transparent' }}>
+                      {weekSchedule[i] !== '-' ? weekSchedule[i] : '—'}
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
 
-            <div className="results-card glass-panel" style={{ padding: '1.25rem', borderRadius: '20px', marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              <h4 style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', margin: 0 }}>
-                <Activity size={18} color="var(--accent-primary)" /> Resultados & Metas Fisiológicas
-              </h4>
-              
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Classificação do seu IMC:</span>
-                <span style={{ fontWeight: 700, color: bmiClass === 'Peso Ideal (Saudável)' ? '#30d158' : '#ff9f0a' }}>
-                  {bmi} • {bmiClass}
-                </span>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Peso Ideal Sugerido:</span>
-                <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
-                  {minWeight} kg a {maxWeight} kg
-                </span>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed var(--border-color)', paddingTop: '0.5rem', fontSize: '0.875rem' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Meta de Hidratação Diária (35ml/kg):</span>
-                <span style={{ fontWeight: 700, color: '#0a84ff', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                  <Droplet size={16} /> {(waterGoal / 1000).toFixed(2)} Litros ({waterGoal}ml)
-                </span>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Gasto Calórico Diário Recomendado:</span>
-                <span style={{ fontWeight: 700, color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                  <Scale size={16} /> {calorieGoal} kcal
-                </span>
-              </div>
-            </div>
-
-            <div style={{ marginBottom: '1.5rem' }}>
-              <h4 style={{ fontWeight: 600, marginBottom: '1rem' }}>Planilhas de Treino Personalizadas:</h4>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {generatedWorkouts.map((w, idx) => (
-                  <div key={idx} className="workout-sheet glass-panel" style={{ padding: '1rem', borderRadius: '16px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                      <div>
-                        <h5 style={{ fontWeight: 700, fontSize: '0.9375rem' }}>{w.title}</h5>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                          {w.exercises.length} exercícios • {w.duration} min
-                        </span>
-                      </div>
-                      <span style={{ fontSize: '0.75rem', color: g.color, fontWeight: 700, background: `${g.color}15`, padding: '0.25rem 0.625rem', borderRadius: '100px' }}>{w.intensity}</span>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                      {w.exercises.map((ex: any, ei: number) => (
-                        <div key={ei} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.75rem', background: 'rgba(255,255,255,0.03)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                          <div>
-                            <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#fff' }}>{ex.name}</div>
-                            <div style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)' }}>{ex.machine}</div>
+            {/* Workout cards with VIDEO */}
+            <div style={{ marginBottom: '1rem' }}>
+              <p style={{ fontSize: '0.6875rem', fontWeight: 700, color: 'var(--text-secondary)', letterSpacing: '0.06em', marginBottom: '0.75rem' }}>TREINOS DO SEU PLANO</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {generatedWorkouts.map((w, idx) => {
+                  const firstVideo = w.exercises.find((ex: any) => ex.video)?.video;
+                  return (
+                    <div key={idx} className="plan-workout-card">
+                      {/* Video banner */}
+                      <div className="plan-video-wrap">
+                        {firstVideo ? (
+                          <video src={firstVideo} muted loop playsInline autoPlay className="plan-video" />
+                        ) : (
+                          <div className="plan-video-placeholder">
+                            <span style={{ fontSize: '2rem' }}>🏋️</span>
                           </div>
-                          <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent-primary)' }}>{ex.sets}x {ex.reps}</div>
-                            <div style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)' }}>{ex.load}</div>
-                          </div>
+                        )}
+                        {/* Overlay with name + badge */}
+                        <div className="plan-video-overlay">
+                          <span style={{ fontSize: '0.65rem', fontWeight: 800, color: goalInfo.color, background: `${goalInfo.color}22`, border: `1px solid ${goalInfo.color}40`, borderRadius: '100px', padding: '0.2rem 0.6rem', display: 'inline-block', marginBottom: '0.375rem' }}>{w.intensity}</span>
+                          <h5 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#fff', margin: 0 }}>{w.title}</h5>
+                          <p style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.6)', margin: 0 }}>{w.exercises.length} exercícios · {w.duration} min</p>
                         </div>
-                      ))}
+                      </div>
+                      {/* Exercise pills */}
+                      <div style={{ padding: '0.75rem 0.875rem', display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                        {w.exercises.map((ex: any, ei: number) => (
+                          <div key={ei} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.4rem 0.5rem', background: 'rgba(255,255,255,0.04)', borderRadius: '8px' }}>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>{ex.name}</span>
+                            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: goalInfo.color, whiteSpace: 'nowrap', marginLeft: '0.5rem' }}>{ex.sets}×{ex.reps} · {ex.load}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
-            <button className="primary-btn" style={{ width: '100%', padding: '1.25rem' }} onClick={handleActivatePlan}>
-              ATIVAR MEU PLANO AGORA ⚡
-            </button>
-          </div>
-          );
-        })()}
-
-      {showSuccessModal && (
-        <div className="celebration-overlay">
-          <div className="celebration-card glass-panel anim-scale-up" style={{ maxWidth: '360px', padding: '2.5rem 1.75rem' }}>
-            <div className="success-icon-ring" style={{ width: '80px', height: '80px', background: 'rgba(225, 255, 0, 0.15)', marginBottom: '1.5rem', boxShadow: '0 0 20px rgba(225, 255, 0, 0.2)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%' }}>
-              <Sparkles size={40} color="var(--accent-primary)" />
-            </div>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#fff', marginBottom: '0.5rem', textAlign: 'center' }}>Plano Ativado! ⚡</h3>
-            <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', marginBottom: '2rem', textAlign: 'center', lineHeight: 1.4 }}>
-              Seu plano personalizado de treino e biometria corporal foi calculado e ativado com sucesso!
-            </p>
-            <button 
-              className="primary-btn" 
-              onClick={() => window.location.reload()}
-              style={{ width: '100%', padding: '1.15rem', margin: 0 }}
+            <button
+              className="primary-btn"
+              style={{ width: '100%', padding: '1.1rem', fontSize: '0.9rem', fontWeight: 800, letterSpacing: '0.04em' }}
+              onClick={handleActivatePlan}
               type="button"
             >
-              COMEÇAR TREINOS
+              ATIVAR MEU PLANO ⚡
             </button>
           </div>
-        </div>
-      )}
+        )}
 
       </div>
     </div>
