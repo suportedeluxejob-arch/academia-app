@@ -278,6 +278,8 @@ export default function Explore({ onPlanActivated }: ExploreProps) {
   // Selected muscles
   const [selectedMuscles, setSelectedMuscles] = useState<string[]>(['quads', 'calves', 'back']);
   const [generatedWorkouts, setGeneratedWorkouts] = useState<any[]>([]);
+  const [isActivating, setIsActivating] = useState(false);
+  const [activateError, setActivateError] = useState('');
   const GOAL_MAP: any = {
     hypertrophy: { icon: '💪', label: 'HIPERTROFIA', color: '#ff6b35' },
     fat_loss:    { icon: '🔥', label: 'EMAGRECIMENTO', color: '#ff9500' },
@@ -381,38 +383,50 @@ export default function Explore({ onPlanActivated }: ExploreProps) {
   };
 
   const handleActivatePlan = async () => {
+    setActivateError('');
     const user = auth.currentUser;
-    if (!user) return;
-    const userRef = ref(db, `users/${user.uid}`);
-    const snapshot = await get(userRef);
-    const existing = snapshot.val() || {};
+    if (!user) {
+      setActivateError('Você precisa estar logado para ativar o plano.');
+      return;
+    }
+    setIsActivating(true);
+    try {
+      const userRef = ref(db, `users/${user.uid}`);
+      const snapshot = await get(userRef);
+      const existing = snapshot.val() || {};
 
-    const w = parseFloat(weight);
-    const h = parseFloat(height);
-    const a = parseInt(age);
-    const calculatedWater = Math.round(w * 35);
-    const bmr = gender === 'male' ? 10 * w + 6.25 * h - 5 * a + 5 : 10 * w + 6.25 * h - 5 * a - 161;
-    const multiplier = activity === 'sedentary' ? 1.2 : activity === 'active' ? 1.725 : 1.375;
-    const calculatedCalories = Math.round(bmr * multiplier);
+      const w = parseFloat(weight);
+      const h = parseFloat(height);
+      const a = parseInt(age);
+      const calculatedWater = Math.round(w * 35);
+      const bmr = gender === 'male' ? 10 * w + 6.25 * h - 5 * a + 5 : 10 * w + 6.25 * h - 5 * a - 161;
+      const multiplier = activity === 'sedentary' ? 1.2 : activity === 'active' ? 1.725 : 1.375;
+      const calculatedCalories = Math.round(bmr * multiplier);
 
-    await set(userRef, {
-      ...existing,
-      weight: w,
-      height: h,
-      age: a,
-      gender,
-      activity,
-      goal,
-      waist: parseFloat(waist),
-      arm: parseFloat(arm),
-      waterGoal: calculatedWater,
-      calorieGoal: calculatedCalories,
-      currentPlan: generatedWorkouts,
-      water: 0,
-      caloriesEaten: 0,
-      caloriesBurned: 0,
-    });
-    onPlanActivated();
+      await set(userRef, {
+        ...existing,
+        weight: w,
+        height: h,
+        age: a,
+        gender,
+        activity,
+        goal,
+        waist: parseFloat(waist),
+        arm: parseFloat(arm),
+        waterGoal: calculatedWater,
+        calorieGoal: calculatedCalories,
+        currentPlan: generatedWorkouts,
+        water: 0,
+        caloriesEaten: 0,
+        caloriesBurned: 0,
+      });
+      onPlanActivated();
+    } catch (err: any) {
+      console.error('Erro ao ativar plano:', err);
+      setActivateError('Erro ao salvar plano. Verifique sua conexão e tente novamente.');
+    } finally {
+      setIsActivating(false);
+    }
   };
 
   return (
@@ -822,13 +836,27 @@ export default function Explore({ onPlanActivated }: ExploreProps) {
               </div>
             </div>
 
+            {activateError && (
+              <div style={{ background: 'rgba(255,59,48,0.1)', border: '1px solid rgba(255,59,48,0.3)', borderRadius: '12px', padding: '0.75rem 1rem', marginBottom: '0.75rem', fontSize: '0.8125rem', color: '#ff3b30', textAlign: 'center' }}>
+                {activateError}
+              </div>
+            )}
+
             <button
               className="primary-btn"
-              style={{ width: '100%', padding: '1.1rem', fontSize: '0.9rem', fontWeight: 800, letterSpacing: '0.04em' }}
+              style={{ width: '100%', padding: '1.1rem', fontSize: '0.9rem', fontWeight: 800, letterSpacing: '0.04em', opacity: isActivating ? 0.7 : 1, cursor: isActivating ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
               onClick={handleActivatePlan}
               type="button"
+              disabled={isActivating}
             >
-              ATIVAR MEU PLANO ⚡
+              {isActivating ? (
+                <>
+                  <span style={{ display: 'inline-block', width: '16px', height: '16px', border: '2px solid #000', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                  SALVANDO...
+                </>
+              ) : (
+                'ATIVAR MEU PLANO ⚡'
+              )}
             </button>
           </div>
         )}
