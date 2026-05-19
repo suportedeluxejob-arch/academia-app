@@ -252,7 +252,14 @@ function App() {
         title: activeWorkout.title,
         exercisesCount: activeWorkout.exercises.length,
         duration: activeWorkout.duration || 10,
-        xpEarned: 100
+        xpEarned: 100,
+        exercises: activeWorkout.exercises.map((ex: any) => ({
+          name: ex.name,
+          machine: ex.machine || '',
+          sets: ex.sets,
+          reps: ex.reps,
+          load: ex.load
+        }))
       });
 
       await set(userRef, {

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { CheckCircle, ChevronRight, Scale, Activity, Droplet, Sparkles } from 'lucide-react';
-import { ref, set } from 'firebase/database';
+import { ref, set, get } from 'firebase/database';
 import { db, auth } from './firebase';
 import './Explore.css';
 
@@ -261,7 +261,8 @@ const EXERCISE_DATABASE: any = {
 
 export default function Explore() {
   const [step, setStep] = useState(1);
-  const [subStep, setSubStep] = useState(1);
+  const [subStep, setSubStep] = useState(0);
+  const [goal, setGoal] = useState('hypertrophy'); // hypertrophy | fat_loss | performance | wellness
   
   // Body Info States
   const [weight, setWeight] = useState('80');
@@ -333,17 +334,15 @@ export default function Explore() {
     const calculatedCalories = Math.round(bmr * multiplier);
     setCalorieGoal(calculatedCalories);
 
-    // 5. Scientific training volume and loads based on BMI / physical metrics
+    // 5. Sets/reps based on GOAL first, then adjusted by BMI
     let sets = 4;
     let reps = '10-12';
-    
-    if (computedBmi >= 25) {
-      sets = 4;
-      reps = '12-15';
-    } else if (computedBmi < 18.5) {
-      sets = 3;
-      reps = '8-10';
-    }
+    if (goal === 'hypertrophy') { sets = 4; reps = '8-12'; }
+    else if (goal === 'fat_loss') { sets = 4; reps = '12-15'; }
+    else if (goal === 'performance') { sets = 5; reps = '5-8'; }
+    else if (goal === 'wellness') { sets = 3; reps = '12-15'; }
+    // BMI override for extremes
+    if (computedBmi < 18.5) { sets = 3; reps = '8-10'; }
 
     // Split selected muscles into max 2 training sheets
     let workouts: any[] = [];
@@ -406,31 +405,32 @@ export default function Explore() {
     setStep(3);
   };
 
-  const handleActivatePlan = () => {
+  const handleActivatePlan = async () => {
     const user = auth.currentUser;
     if (!user) return;
     const userRef = ref(db, `users/${user.uid}`);
-    const planData = {
+    // Preserve existing progress (streak, XP, history, etc.)
+    const snapshot = await get(userRef);
+    const existing = snapshot.val() || {};
+    await set(userRef, {
+      ...existing,
       weight: parseFloat(weight),
       height: parseFloat(height),
       age: parseInt(age),
-      gender: gender,
-      activity: activity,
+      gender,
+      activity,
+      goal,
       waist: parseFloat(waist),
       arm: parseFloat(arm),
-      waterGoal: waterGoal,
-      calorieGoal: calorieGoal,
+      waterGoal,
+      calorieGoal,
+      currentPlan: generatedWorkouts,
+      // Reset only daily trackers, not progress
       water: 0,
       caloriesEaten: 0,
       caloriesBurned: 0,
-      currentPlan: generatedWorkouts,
-      streak: 0,
-      workoutsMonth: 0
-    };
-
-    set(userRef, planData).then(() => {
-      setShowSuccessModal(true);
     });
+    setShowSuccessModal(true);
   };
 
   return (
@@ -440,7 +440,7 @@ export default function Explore() {
         <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
           <h2 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Plano Personalizado</h2>
           <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent-primary)' }}>
-            {step === 1 ? `Etapa ${subStep} de 4` : step === 2 ? 'Etapa Foco' : 'Concluído'}
+            {step === 1 ? (subStep === 0 ? 'Etapa 1 de 5' : `Etapa ${subStep + 1} de 5`) : step === 2 ? 'Etapa Foco' : 'Concluído'}
           </span>
         </div>
         <div className="progress-bar-container">
@@ -448,7 +448,7 @@ export default function Explore() {
             className="progress-bar-fill" 
             style={{ 
               width: step === 1 
-                ? `${(subStep / 4) * 100}%` 
+                ? `${((subStep + 1) / 5) * 100}%`
                 : step === 2 
                   ? '90%' 
                   : '100%',
@@ -463,6 +463,43 @@ export default function Explore() {
         {step === 1 && (
           <div className="step-container">
             
+            {subStep === 0 && (
+              <div className="substep-card anim-slide-in">
+                <div style={{ marginBottom: '1.75rem' }}>
+                  <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>🎯</div>
+                  <h3 style={{ fontSize: '1.375rem', fontWeight: 800, marginBottom: '0.35rem' }}>Qual é o seu Objetivo?</h3>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', lineHeight: 1.5 }}>Isso define toda a prescrição do seu plano — séries, cargas, intensidade e volume.</p>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+                  {[
+                    { id: 'hypertrophy', icon: '💪', title: 'Hipertrofia', desc: 'Ganhar massa muscular e volume', color: '#ff6b35' },
+                    { id: 'fat_loss',    icon: '🔥', title: 'Emagrecimento', desc: 'Queimar gordura e definir o corpo', color: '#ff9500' },
+                    { id: 'performance', icon: '⚡', title: 'Performance', desc: 'Aumentar força e resistência atlética', color: '#bf5af2' },
+                    { id: 'wellness',    icon: '🧘', title: 'Saúde & Bem-estar', desc: 'Manutenção saudável e qualidade de vida', color: '#30d158' },
+                  ].map(g => (
+                    <button
+                      key={g.id}
+                      type="button"
+                      className={`frequency-card ${goal === g.id ? 'selected' : ''}`}
+                      onClick={() => setGoal(g.id)}
+                      style={{ position: 'relative', overflow: 'hidden' }}
+                    >
+                      {goal === g.id && <div style={{ position: 'absolute', inset: 0, background: `${g.color}10`, borderRadius: 'inherit' }} />}
+                      <span className="freq-icon">{g.icon}</span>
+                      <div style={{ flex: 1, textAlign: 'left' }}>
+                        <span className="freq-title" style={{ color: goal === g.id ? g.color : undefined }}>{g.title}</span>
+                        <span className="freq-subtitle">{g.desc}</span>
+                      </div>
+                      {goal === g.id && <CheckCircle size={18} color={g.color} />}
+                    </button>
+                  ))}
+                </div>
+                <button className="primary-btn continue-btn" style={{ marginTop: '2.5rem' }} onClick={() => setSubStep(1)}>
+                  CONTINUAR <ChevronRight size={20} color="#000" />
+                </button>
+              </div>
+            )}
+
             {subStep === 1 && (
               <div className="substep-card anim-slide-in">
                 <div style={{ marginBottom: '1.75rem' }}>
@@ -737,14 +774,56 @@ export default function Explore() {
           </div>
         )}
 
-        {step === 3 && (
+        {step === 3 && (() => {
+          const goalMap: any = {
+            hypertrophy: { icon: '💪', label: 'MODO HIPERTROFIA', color: '#ff6b35' },
+            fat_loss:    { icon: '🔥', label: 'MODO EMAGRECIMENTO', color: '#ff9500' },
+            performance: { icon: '⚡', label: 'MODO PERFORMANCE', color: '#bf5af2' },
+            wellness:    { icon: '🧘', label: 'MODO BEM-ESTAR', color: '#30d158' },
+          };
+          const g = goalMap[goal] || goalMap.hypertrophy;
+          // Weekly schedule based on frequency
+          const days = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+          const scheduleMap: any = {
+            sedentary: ['A', '-', 'B', '-', '-', '-', '-'],
+            moderate:  ['A', '-', 'B', '-', 'A', '-', '-'],
+            active:    ['A', 'B', '-', 'A', 'B', '-', '-'],
+          };
+          const schedule = scheduleMap[activity] || scheduleMap.moderate;
+          return (
           <div className="step-container">
-            <div className="success-banner" style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+            {/* Goal Badge */}
+            <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', background: `${g.color}15`, border: `1px solid ${g.color}40`, borderRadius: '100px', padding: '0.5rem 1.25rem', marginBottom: '1rem' }}>
+                <span style={{ fontSize: '1.25rem' }}>{g.icon}</span>
+                <span style={{ fontSize: '0.75rem', fontWeight: 800, color: g.color, letterSpacing: '0.08em' }}>{g.label} ATIVADO</span>
+              </div>
               <div className="success-icon-ring">
                 <Sparkles size={32} color="var(--accent-primary)" />
               </div>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginTop: '1rem' }}>Análise Corporal Completa!</h3>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Cargas, séries e hidratação calculadas sem aleatoriedades</p>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginTop: '1rem' }}>Seu Perfil Atlético Gerado!</h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Cargas, séries e hidratação calculadas para o seu corpo</p>
+            </div>
+
+            {/* Weekly Schedule */}
+            <div className="glass-panel" style={{ padding: '1rem', borderRadius: '16px', marginBottom: '1.25rem' }}>
+              <p style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.75rem', letterSpacing: '0.06em' }}>DIVISÃO SEMANAL RECOMENDADA</p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '0.25rem', textAlign: 'center' }}>
+                {days.map((d, i) => (
+                  <div key={i}>
+                    <div style={{ fontSize: '0.625rem', color: 'var(--text-secondary)', marginBottom: '0.35rem', fontWeight: 600 }}>{d}</div>
+                    <div style={{
+                      padding: '0.4rem 0.1rem',
+                      borderRadius: '8px',
+                      fontSize: '0.65rem',
+                      fontWeight: 700,
+                      background: schedule[i] !== '-' ? `${g.color}20` : 'rgba(255,255,255,0.04)',
+                      color: schedule[i] !== '-' ? g.color : 'var(--text-secondary)',
+                      border: schedule[i] !== '-' ? `1px solid ${g.color}40` : '1px solid transparent',
+                    }}>{schedule[i] !== '-' ? schedule[i] : '—'}</div>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div className="results-card glass-panel" style={{ padding: '1.25rem', borderRadius: '20px', marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -782,27 +861,44 @@ export default function Explore() {
             </div>
 
             <div style={{ marginBottom: '1.5rem' }}>
-              <h4 style={{ fontWeight: 600, marginBottom: '1rem' }}>Planilhas de Carga e Treino Adaptadas:</h4>
+              <h4 style={{ fontWeight: 600, marginBottom: '1rem' }}>Planilhas de Treino Personalizadas:</h4>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 {generatedWorkouts.map((w, idx) => (
-                  <div key={idx} className="workout-sheet glass-panel" style={{ padding: '1rem', borderRadius: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <h5 style={{ fontWeight: 600, fontSize: '0.9375rem' }}>{w.title}</h5>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                        {w.exercises.length} Aparelhos • Foco: {w.muscles.join(', ')}
-                      </span>
+                  <div key={idx} className="workout-sheet glass-panel" style={{ padding: '1rem', borderRadius: '16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                      <div>
+                        <h5 style={{ fontWeight: 700, fontSize: '0.9375rem' }}>{w.title}</h5>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                          {w.exercises.length} exercícios • {w.duration} min
+                        </span>
+                      </div>
+                      <span style={{ fontSize: '0.75rem', color: g.color, fontWeight: 700, background: `${g.color}15`, padding: '0.25rem 0.625rem', borderRadius: '100px' }}>{w.intensity}</span>
                     </div>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--accent-primary)', fontWeight: 600 }}>{w.duration} min</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      {w.exercises.map((ex: any, ei: number) => (
+                        <div key={ei} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.75rem', background: 'rgba(255,255,255,0.03)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                          <div>
+                            <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#fff' }}>{ex.name}</div>
+                            <div style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)' }}>{ex.machine}</div>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent-primary)' }}>{ex.sets}x {ex.reps}</div>
+                            <div style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)' }}>{ex.load}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
 
             <button className="primary-btn" style={{ width: '100%', padding: '1.25rem' }} onClick={handleActivatePlan}>
-              ATIVAR PLANO AGORA
+              ATIVAR MEU PLANO AGORA ⚡
             </button>
           </div>
-        )}
+          );
+        })()}
 
       {showSuccessModal && (
         <div className="celebration-overlay">
