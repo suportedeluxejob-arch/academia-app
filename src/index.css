@@ -1,0 +1,82 @@
+:root {
+  /* Brand Colors - Dark/Focus Theme */
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #171717;
+  --bg-card: #1f1f22;
+  --bg-card-hover: #262629;
+  
+  --text-primary: #f8fafc;
+  --text-secondary: #a1a1aa;
+  
+  --accent-primary: #e1ff00; /* Vibrant neon yellow/green for that focus/workout energy */
+  --accent-primary-hover: #ccf000;
+  --accent-primary-dim: rgba(225, 255, 0, 0.15);
+  
+  --border-color: rgba(255, 255, 255, 0.08);
+  
+  --gradient-bg: linear-gradient(145deg, #0a0a0a 0%, #111111 100%);
+  --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background-color: #000; /* Outer background to frame the app */
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.5;
+  overflow-x: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  min-height: -webkit-fill-available;
+}
+
+html {
+  height: -webkit-fill-available;
+}
+
+/* Mobile App Container Constraint */
+#root {
+  width: 100%;
+  max-width: 480px; /* Restrict width for mobile-first feel on desktop */
+  min-height: 100vh;
+  background: var(--gradient-bg);
+  position: relative;
+  overflow-x: hidden;
+  box-shadow: 0 0 50px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Scrollbar customization */
+::-webkit-scrollbar {
+  width: 0px;
+  background: transparent;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+.glass-panel {
+  background: rgba(31, 31, 34, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-color);
+}
