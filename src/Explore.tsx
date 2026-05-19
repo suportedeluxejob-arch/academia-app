@@ -295,8 +295,6 @@ export default function Explore() {
     const w = parseFloat(weight);
     const h = parseFloat(height);
     const a = parseInt(age);
-    const _waistNum = parseFloat(waist);
-    const _armNum = parseFloat(arm);
 
     if (isNaN(w) || isNaN(h) || isNaN(a)) return;
 
