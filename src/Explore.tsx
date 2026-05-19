@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, CheckCircle, ChevronRight, Scale, Activity, Droplet, Sparkles, Heart } from 'lucide-react';
+import { useState } from 'react';
+import { CheckCircle, ChevronRight, Scale, Activity, Droplet, Sparkles } from 'lucide-react';
 import { ref, set } from 'firebase/database';
 import { db, auth } from './firebase';
 import './Explore.css';
@@ -295,8 +295,8 @@ export default function Explore() {
     const w = parseFloat(weight);
     const h = parseFloat(height);
     const a = parseInt(age);
-    const waistNum = parseFloat(waist);
-    const armNum = parseFloat(arm);
+    const _waistNum = parseFloat(waist);
+    const _armNum = parseFloat(arm);
 
     if (isNaN(w) || isNaN(h) || isNaN(a)) return;
 

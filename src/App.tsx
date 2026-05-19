@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   Play, 
   Dumbbell, 
@@ -191,7 +191,6 @@ function App() {
 
     try {
       if (!currentUser) return;
-      const userRef = ref(db, `users/${currentUser.uid}`);
       await set(ref(db, `users/${currentUser.uid}/currentPlan`), updatedPlan);
       console.log("Specs permanently persisted to database currentPlan!");
     } catch (err) {

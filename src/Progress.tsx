@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Heart, Flame, Droplet, Scale, X, Activity, Ruler } from 'lucide-react';
 import { ref, onValue, set, get } from 'firebase/database';
 import { db, auth } from './firebase';

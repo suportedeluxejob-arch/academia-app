@@ -6,7 +6,7 @@ import {
 } from 'firebase/auth';
 import { ref, set } from 'firebase/database';
 import { auth, db } from './firebase';
-import { Dumbbell, Mail, Lock, User, Sparkles, ArrowRight } from 'lucide-react';
+import { Dumbbell, Mail, Lock, User, ArrowRight } from 'lucide-react';
 import './Auth.css';
 
 interface AuthProps {
